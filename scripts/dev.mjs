@@ -1,0 +1,11 @@
+import { createServer } from 'node:http';
+import { readFile, stat } from 'node:fs/promises';
+import { resolve, extname, sep } from 'node:path';
+process.env.WHATSAPP_MODE ||= 'preview';
+process.env.PORT ||= '3000';
+process.env.APP_URL ||= `http://localhost:${process.env.PORT}`;
+const {default:handler}=await import('../api/index.mjs');
+const root=resolve('public');
+const types={'.html':'text/html','.js':'application/javascript','.css':'text/css','.jpg':'image/jpeg','.png':'image/png','.svg':'image/svg+xml'};
+const server=createServer(async(req,res)=>{const url=new URL(req.url,process.env.APP_URL);if(url.pathname.startsWith('/api/'))return handler(req,res);try{const file=resolve(root,'.'+(url.pathname==='/'?'/index.html':url.pathname));if(!file.startsWith(root+sep)||!(await stat(file)).isFile()){res.statusCode=404;res.end('Not found');return}res.setHeader('Content-Type',types[extname(file)]||'application/octet-stream');res.end(await readFile(file))}catch{res.statusCode=404;res.end('Not found')}});
+server.listen(Number(process.env.PORT),'127.0.0.1',()=>console.log(`Plix ROOT local preview: http://localhost:${process.env.PORT} (no sign-in required; WhatsApp delivery preview)`));
