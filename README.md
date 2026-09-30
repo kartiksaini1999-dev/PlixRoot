@@ -36,7 +36,7 @@ For the reviewer screen, copy `.env.example` to `.env.local`, set `REVIEWER_API_
 3. Connect a **Neon Postgres** database to the project. Set `DATABASE_URL` to its Neon connection URL. This implementation uses Neon's HTTP client; it is not a generic TCP Postgres client.
 4. Create and connect a **private Vercel Blob** store. Set `BLOB_READ_WRITE_TOKEN`. Do not use a public store for user media.
 5. For optional WhatsApp report delivery, configure a Twilio WhatsApp sender and approved Content template. Twilio is not required to complete an assessment or see recommendations. No Verify service is used.
-6. Set `APP_URL` to the exact HTTPS production origin, e.g. `https://your-project.vercel.app`; set `REVIEWER_API_KEY` to a strong unique secret.
+6. Leave `APP_URL` unset to detect the current Vercel hostname automatically. Optionally set it to an exact HTTPS origin to restrict requests to that domain. Set `REVIEWER_API_KEY` to a strong unique secret.
 7. Deploy. The server applies the idempotent schema on first database use. You can also run `npm run db:migrate` with the deployment's `DATABASE_URL` configured locally. `GET /api/health` returns database readiness.
 8. Test optional WhatsApp delivery, upload callbacks, private media playback, browser journey access and reviewer completion on the deployed origin. These external integrations cannot be exercised without your credentials.
 
@@ -48,13 +48,13 @@ npx vercel
 npx vercel --prod
 ```
 
-The request origin check permits the exact `APP_URL`. For a separate Preview deployment, set its Preview `APP_URL` to that preview origin and redeploy. Keep Preview and Production databases/stores separate when handling real user information.
+The request origin check compares the browser Origin to the HTTPS hostname Vercel forwards, covering both the production alias and preview deployment URL. It rejects cross-site requests and does not trust the browser Origin to select the allowed host. An optional `APP_URL` pins access to that exact origin; clear it for previews or set it to the preview origin. Keep Preview and Production databases/stores separate when handling real user information.
 
 ## Environment variables
 
 | Variable | Purpose |
 | --- | --- |
-| `APP_URL` | Exact application origin for same-origin requests and protected report links |
+| `APP_URL` | Optional origin override. Leave unset for automatic Vercel domain detection; no trailing path |
 | `DATABASE_URL` | Neon database connection URL; required on Vercel |
 | `BLOB_READ_WRITE_TOKEN` | Token for a **private** Vercel Blob store |
 | `WHATSAPP_MODE` | Optional `preview` locally only; real delivery on Vercel requires messaging credentials |
@@ -105,6 +105,12 @@ Key routes:
 - `/api/admin/queue`, `/api/admin/intake`, `/api/admin/review`
 - `DELETE /api/account`
 
+## Fix for the deployment error
+
+The `APP_URL must be configured before saving assessments` failure is fixed: an unset `APP_URL` now uses the request hostname and HTTPS on Vercel. No phone authentication is introduced. Redeploy this updated source to apply the change. To unblock the previous build without changing code, set `APP_URL=https://plixroot.vercel.app` in Vercel Project Settings → Environment Variables for Production, then redeploy.
+
+Persistent saving still requires a connected Neon database and `DATABASE_URL`. A missing database now returns a specific 503 setup message instead of a generic server error. Optional initial uploads and mandatory personalised-report media require the private Blob token.
+
 ## Verification
 
 Browser automation could not start in the build environment. Backend integration tests and consumer-screen script rendering were verified; responsive visual QA and real-provider end-to-end checks should be completed on your Vercel preview.
@@ -114,7 +120,7 @@ npm test
 npm run build
 ```
 
-The backend integration test exercises silent browser-session creation/reuse, removed OTP endpoints, saved reports with no photos, retained recommendations under referral, mandatory photo/video intake, human review with original preservation, cross-browser access rejection, preview message state, and journey deletion. Real Twilio/Neon/Blob operations require credentials and deployment verification.
+The backend integration test exercises origin auto-detection without APP_URL, cross-site rejection, silent browser-session creation/reuse, removed OTP endpoints, saved reports with no photos, retained recommendations under referral, mandatory photo/video intake, human review with original preservation, cross-browser access rejection, preview message state, and journey deletion. Real Twilio/Neon/Blob operations require credentials and deployment verification.
 
 ## Files
 
@@ -128,4 +134,4 @@ The backend integration test exercises silent browser-session creation/reuse, re
 
 Visual references: official Plix serum/shampoo/hair-gummies imagery. The concept is not an official Plix service.
 
-Primary implementation references: https://vercel.com/docs/functions/runtimes/node-js, https://vercel.com/docs/vercel-blob/client-upload, https://vercel.com/docs/vercel-blob/private-storage, https://www.twilio.com/docs/whatsapp/api, https://neon.com/docs/serverless/serverless-driver.
+Primary implementation references: https://vercel.com/docs/headers/request-headers, https://vercel.com/docs/functions/runtimes/node-js, https://vercel.com/docs/vercel-blob/client-upload, https://vercel.com/docs/vercel-blob/private-storage, https://www.twilio.com/docs/whatsapp/api, https://neon.com/docs/serverless/serverless-driver.
